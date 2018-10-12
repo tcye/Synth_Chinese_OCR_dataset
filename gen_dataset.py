@@ -129,9 +129,14 @@ def get_horizontal_text_picture(image_file,color_lib,char_lines,fonts,font_sizes
     if img.mode != 'RGB':
         img = img.convert('RGB')
     w, h = img.size
+    factor = 600 / max(w, h)
+    img = img.resize((int(w*factor), int(h*factor)), Image.BILINEAR)
+    w, h = img.size
+
     while True:
         chars = get_chars(char_lines)
         font = chose_font(fonts,font_sizes)
+
         f_w, f_h = font.getsize(chars)
         if f_w < w:
             # 完美分割时应该取的
@@ -167,9 +172,16 @@ def get_horizontal_text_picture(image_file,color_lib,char_lines,fonts,font_sizes
             pass
 
     draw = ImageDraw.Draw(img)
-    draw.text((x1, y1), chars, best_color, font=font)
-    crop_img = img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
-    return crop_img,chars
+
+    char_pos = []
+
+    for ch in chars:
+        ch_w, ch_h = font.getsize(ch)
+        draw.text((x1, y1), ch, best_color, font=font)
+        char_pos.append((x1, y1, ch_w, ch_h))
+        x1 += ch_w
+
+    return img, chars, char_pos
 
 
 def get_vertical_text_picture(image_file,color_lib,char_lines,fonts,font_sizes):
@@ -177,6 +189,10 @@ def get_vertical_text_picture(image_file,color_lib,char_lines,fonts,font_sizes):
     if img.mode != 'RGB':
         img = img.convert('RGB')
     w, h = img.size
+    factor = 600 / max(w, h)
+    img = img.resize((int(w*factor), int(h*factor)), Image.BILINEAR)
+    w, h = img.size
+
     retry = 0
     while True:
         chars = get_chars(char_lines)
@@ -223,27 +239,25 @@ def get_vertical_text_picture(image_file,color_lib,char_lines,fonts,font_sizes):
             pass
 
     draw = ImageDraw.Draw(img)
-    i = 0
+    char_pos = []
     for ch in chars:
+        ch_w, ch_h = font.getsize(ch)
         draw.text((x1, y1), ch, best_color, font=font)
-        y1 = y1 + ch_h[i]
-        i = i + 1
+        char_pos.append((x1, y1, ch_w, ch_h))
+        y1 += ch_h
 
-    crop_img = img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
-    crop_img = crop_img.transpose(Image.ROTATE_270)
-    return crop_img,chars
+    return img, chars, char_pos
 
 if __name__ == '__main__':
     # 读入字体色彩库
     color_lib = FontColor('./models/colors_new.cp')
     # 读入字体
     font_path = './fonts/more_font/'
-    font_sizes = list(range(16,40))
+    font_sizes = list(range(20,64))
     fonts = get_fonts(font_path,font_sizes)
     # 读入newsgroup
     txt_root_path = './newsgroup'
     char_lines = get_char_lines(txt_root_path=txt_root_path)
-
 
     img_root_path = './bg_img/'
     imnames_path = './imnames.cp'
@@ -265,19 +279,25 @@ if __name__ == '__main__':
 
     f = open(labels_path,'a',encoding='utf-8')
     print('start generating...')
-    for i in range(gs+1,2000000):
+    for i in range(gs+1,500000):
         imname = random.choice(imnames)
         img_path = os.path.join(img_root_path,imname)
         rnd = random.random()
         if rnd<0.8: # 设定产生水平文本的概率
-            gen_img, chars = get_horizontal_text_picture(img_path,color_lib,char_lines,fonts,font_sizes)
+            gen_img, chars, char_pos = get_horizontal_text_picture(img_path,color_lib,char_lines,fonts,font_sizes)
         else:
-            gen_img, chars = get_vertical_text_picture(img_path, color_lib, char_lines, fonts, font_sizes)
+            gen_img, chars, char_pos = get_vertical_text_picture(img_path, color_lib, char_lines, fonts, font_sizes)
+
         save_img_name = 'img_' + str(i).zfill(7) + '.jpg'
+
         if gen_img.mode != 'RGB':
             gen_img= gen_img.convert('RGB')
+
         gen_img.save('./images/'+save_img_name)
-        f.write(save_img_name+ ' '+chars+'\n')
+        f.write(save_img_name+'\n')
+        f.write('%d\n' % len(chars))
+        for ch, pos in zip(chars, char_pos):
+            f.write('\t'.join([ch] + [str(t) for t in pos]) + '\n')
         print('gennerating:-------'+save_img_name)
         # plt.figure()
         # plt.imshow(np.asanyarray(gen_img))
